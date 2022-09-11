@@ -1,0 +1,18 @@
+## Interface: 90205
+## Version: @project-version@
+## Title: |cffBB2003Mania|rFarmableCurrencies
+## Author: Mania
+## Notes: Tracks farmable currencies for mounts, pets, toys and transmog.
+## SavedVariables: MFCDB
+
+# libs\LibStub\LibStub.lua
+# libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+# libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+# libs\AceGUI-3.0\AceGUI-3.0.xml
+# libs\AceConfig-3.0\AceConfig-3.0.xml
+# libs\LibDDI-1.0\lib.lua
+
+locales.lua
+data.lua
+core.lua
+config.lua
