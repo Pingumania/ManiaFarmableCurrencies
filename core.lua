@@ -106,6 +106,56 @@ local function ShowOrHideCurrency(obj)
     end
 end
 
+local function GetObjectFarmAmount(obj)
+    local remaining = 0
+    for i = 1, #obj.items do
+        if CheckMissingItem(obj.items[i]) then
+            remaining = remaining + obj.items[i].cost
+        end
+    end
+    return remaining
+end
+
+local function GetDynamicObjectInfo(obj)
+    if obj.type == "currency" then
+        local info = C_CurrencyInfo.GetCurrencyInfo(obj.id)
+        obj.currentAmount = info.quantity
+        obj.farmAmount = GetObjectFarmAmount(obj)
+    elseif obj.type == "item" then
+        obj.currentAmount = GetItemCount(obj.id,true,true) or 0
+        obj.farmAmount = GetObjectFarmAmount(obj)
+    end
+    return obj
+end
+
+local function GetStaticObjectInfo(obj)
+    if obj.type == "currency" then
+        local info = C_CurrencyInfo.GetCurrencyInfo(obj.id)
+        obj.name = info.name
+        obj.icon = info.iconFileID
+        obj.quality = info.quality
+        local r,g,b,hex = GetItemQualityColor(obj.quality)
+        obj.qualityColor = {r=r,g=g,b=b,hex=hex}
+    elseif obj.type == "item" then
+        obj.quality = select(3, GetItemInfo(obj.id)) or 1
+        local r,g,b,hex = GetItemQualityColor(obj.quality)
+        obj.name = GetItemInfo(obj.id) or "unknown"
+        obj.icon = select(10,GetItemInfo(obj.id)) or 13440 --fallback iconID (questionmark)
+        obj.qualityColor = {r=r,g=g,b=b,hex=hex}
+    end
+    return obj
+end
+
+local function CurrencyTriggerHandler(obj)
+    obj = GetStaticObjectInfo(obj)
+    obj = GetDynamicObjectInfo(obj)
+    if specialCurrencies[obj.id] then
+        obj = specialCurrencies[obj.id](obj)
+    end
+    obj.show = ShowOrHideCurrency(obj)
+    return obj
+end
+
 local function HandleTooltip(obj, region)
     if not obj or not region then return end
     region.tip = region.tip or CreateFrame("Frame", nil, region)
@@ -138,45 +188,8 @@ local function HandleTooltip(obj, region)
     region.tip:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
-local function GetObjectFarmAmount(obj)
-    local remaining = 0
-    for i = 1, #obj.items do
-        if CheckMissingItem(obj.items[i]) then
-            remaining = remaining + obj.items[i].cost
-        end
-    end
-    return remaining
-end
-
-local function GetObjectInfo(obj)
-    if obj.type == "currency" then
-        local info = C_CurrencyInfo.GetCurrencyInfo(obj.id)
-        obj.name = info.name
-        obj.currentAmount = info.quantity
-        obj.icon = info.iconFileID
-        obj.quality = info.quality
-        local r,g,b,hex = GetItemQualityColor(obj.quality)
-        obj.qualityColor = {r=r,g=g,b=b,hex=hex}
-        obj.farmAmount = GetObjectFarmAmount(obj)
-    elseif obj.type == "item" then
-        obj.quality = select(3, GetItemInfo(obj.id)) or 1
-        local r,g,b,hex = GetItemQualityColor(obj.quality)
-        obj.name = GetItemInfo(obj.id) or "unknown"
-        obj.icon = select(10,GetItemInfo(obj.id)) or 13440 --fallback iconID (questionmark)
-        obj.currentAmount = GetItemCount(obj.id,true,true) or 0
-        obj.qualityColor = {r=r,g=g,b=b,hex=hex}
-        obj.farmAmount = GetObjectFarmAmount(obj)
-    end
-    return obj
-end
-
-local function CurrencyTriggerHandler(obj)
-    obj = GetObjectInfo(obj)
-    if specialCurrencies[obj.id] then
-        obj = specialCurrencies[obj.id](obj)
-    end
-    obj.show = ShowOrHideCurrency(obj)
-    return obj
+local function UpdateTrackingText(obj)
+    obj.fs:SetText(obj.currentAmount.."/"..obj.farmAmount)
 end
 
 local function CreateTrackingIcon(obj, offset)
@@ -198,30 +211,53 @@ local function CreateTrackingText(obj)
     local fs = obj.f:CreateFontString()
     fs:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
     fs:SetPoint("LEFT", obj.f, "RIGHT", 3, 0)
-    fs:SetText(obj.currentAmount.."/"..obj.farmAmount)
     obj.fs = fs
 end
 
-local f = CreateFrame("Frame")
-function f:PLAYER_ENTERING_WORLD()
+local function ReorderIcons()
+
+end
+
+local function Update()
+    for i, obj in pairs(ns.D) do
+        obj = CurrencyTriggerHandler(obj)
+        UpdateTrackingText(obj)
+        if obj.show == false then
+            obj.f:Hide()
+            -- ReorderIcons()
+        end
+    end
+end
+
+local function Create()
     local offset = 0
     for i, obj in pairs(ns.D) do
         obj = CurrencyTriggerHandler(obj)
         if obj.show == true then
             CreateTrackingIcon(obj, offset)
             CreateTrackingText(obj)
+            UpdateTrackingText(obj)
             offset = offset + 1
-        else
         end
     end
 end
 
+local f = CreateFrame("Frame")
+f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
--- f:RegisterEvent("UPDATE_FACTION")
--- f:RegisterEvent("UNIT_INVENTORY_CHANGED")
--- f:RegisterEvent("CHAT_MSG_CURRENCY")
--- f:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
--- f:RegisterEvent("NEW_MOUNT_ADDED")
--- f:RegisterEvent("COMPANION_LEARNED")
--- f:RegisterEvent("NEW_TOY_ADDED")
-f:SetScript("OnEvent", function(self, event, ...) self[event](self, event, ...) end)
+f:RegisterEvent("UPDATE_FACTION")
+f:RegisterEvent("UNIT_INVENTORY_CHANGED")
+f:RegisterEvent("CHAT_MSG_CURRENCY")
+f:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
+f:RegisterEvent("NEW_MOUNT_ADDED")
+f:RegisterEvent("COMPANION_LEARNED")
+f:RegisterEvent("NEW_TOY_ADDED")
+f:SetScript("OnEvent", function(self, event, ...)
+    if event == "ADDON_LOADED" and ... == "ManiaFarmableCurrencies" then
+        f:UnregisterEvent("ADDON_LOADED")
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        C_Timer.After(0, Create)
+    else
+        Update()
+    end
+end)
